@@ -1,13 +1,16 @@
 # AI Discovery Channel Bot
 
-NextLeap graduation project: a bot that runs in our **AI discovery channel**. It helps members find, share and talk about AI tools, papers, news and resources.
+NextLeap graduation project: a bot that runs in our **AI discovery channel**. 
+
+## Documentation
+
+📘 **Main docs live in Notion: [NextLeap Grad Project](https://app.notion.com/p/422ac0e1f7f280998ed7f0449ebfecce)**
+
+Product decisions, research, goals and progress updates are kept there. This repo holds the code.
 
 ## Goals
 
-- **Discover**: answer questions like "what's a good tool for X?" with useful, current suggestions
-- **Curate**: collect and tag links shared in the channel so they're easy to find later
-- **Summarise**: give short summaries of shared articles, papers and threads
-- **Digest**: post a regular roundup of what the channel found
+To be defined. See the Notion page.
 
 ## Project structure
 
