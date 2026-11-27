@@ -50,6 +50,13 @@ It gathers public conversations about booking home services in India, then finds
 - **Negativity bias:** public posts over-represent people who had bad experiences.
 - **Silent churn:** customers who simply never came back leave no trace.
 
+## Stack
+
+- **Workflow engine: [n8n](https://n8n.io)** (decided). Workflows are exported to [`workflows/`](workflows/).
+- **AI provider:** to be decided
+- **Hosting:** n8n Cloud or self-hosted (to be decided)
+- **Testable link:** a public n8n form or webhook
+
 ## Pipeline (planned)
 
 ```
@@ -70,8 +77,7 @@ collect  →  clean / dedupe  →  tag (category, city, household, acquisition c
 
 ```
 .
-├── src/       # engine code (collectors, analysis, reporting)
-├── tests/     # automated tests
+├── workflows/ # exported n8n workflow JSON
 ├── docs/      # technical notes (the main docs are in Notion)
 └── .env.example
 ```
@@ -79,9 +85,9 @@ collect  →  clean / dedupe  →  tag (category, city, household, acquisition c
 ## Getting started
 
 1. Clone the repo
-2. Copy `.env.example` to `.env` and fill in your keys (never commit `.env`)
-3. Setup steps will be added once the stack is chosen
+2. Open your n8n instance and import the files in `workflows/` (Workflows → Import from file)
+3. Add your own credentials in n8n (AI provider, Reddit, YouTube). Never commit keys.
 
 ## Status
 
-🚧 Repo set up. Stack and first collector still to be chosen.
+🚧 Stack chosen (n8n). AI provider and first collector still to be chosen.
