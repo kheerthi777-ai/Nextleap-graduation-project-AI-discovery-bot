@@ -1,0 +1,14 @@
+{
+  "name": "playstore-reviews",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Tiny HTTP service that returns public Google Play reviews for an app, for the n8n discovery engine.",
+  "type": "module",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "google-play-scraper": "^10.0.0"
+  }
+}

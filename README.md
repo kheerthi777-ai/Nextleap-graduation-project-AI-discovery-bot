@@ -53,8 +53,9 @@ It gathers public conversations about booking home services in India, then finds
 ## Stack
 
 - **Workflow engine: [n8n](https://n8n.io)** (decided). Workflows are exported to [`workflows/`](workflows/).
-- **AI provider:** to be decided
-- **Hosting:** n8n Cloud or self-hosted (to be decided)
+- **AI provider:** Google Gemini API, free tier
+- **Hosting:** self-hosted with Docker Compose ([setup guide](docs/setup-n8n.md))
+- **Play Store reviews:** a small service in [`services/playstore-reviews/`](services/playstore-reviews/) that n8n calls over HTTP
 - **Testable link:** a public n8n form or webhook
 
 ## Pipeline (planned)
@@ -78,16 +79,22 @@ collect  →  clean / dedupe  →  tag (category, city, household, acquisition c
 ```
 .
 ├── workflows/ # exported n8n workflow JSON
+├── services/  # helper services n8n calls (Play Store reviews)
+├── data/      # collector output CSVs (git-ignored)
+├── docker-compose.yml
 ├── docs/      # technical notes (the main docs are in Notion)
 └── .env.example
 ```
 
 ## Getting started
 
-1. Clone the repo
-2. Open your n8n instance and import the files in `workflows/` (Workflows → Import from file)
-3. Add your own credentials in n8n (AI provider, Reddit, YouTube). Never commit keys.
+See **[docs/setup-n8n.md](docs/setup-n8n.md)**. In short:
+
+1. `docker compose up -d --build`, then open http://localhost:5678
+2. Add your Gemini API key as a Header Auth credential in n8n
+3. Import `workflows/01-playstore-reviews-gemini.json` and run it
+4. Results land in `data/` as CSVs
 
 ## Status
 
-🚧 Stack chosen (n8n). AI provider and first collector still to be chosen.
+🚧 First workflow built: Play Store → Gemini tagging. Not yet run against live data. Reddit API access is restricted, so Reddit will be sampled by hand.

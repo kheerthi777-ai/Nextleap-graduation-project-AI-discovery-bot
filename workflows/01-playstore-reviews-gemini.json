@@ -1,0 +1,368 @@
+{
+  "name": "01 · Play Store reviews → Gemini tags",
+  "nodes": [
+    {
+      "id": "b47b3f97-c8df-4cd6-853b-cf00dc81970b",
+      "name": "Run collector",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "ffce961f-374d-4f14-9cf3-ccb357f3df75",
+      "name": "Settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        300
+      ],
+      "notes": "Change these to re-run. sort: newest | relevant | rating. Check geminiModel against the models your free key can use in Google AI Studio.",
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cbd6a518-70c6-448f-a94a-2e66603d90e5",
+              "name": "appId",
+              "value": "com.urbanclap.urbanclap",
+              "type": "string"
+            },
+            {
+              "id": "03a80e28-62a6-43c0-9cb1-ec0c881fb695",
+              "name": "country",
+              "value": "in",
+              "type": "string"
+            },
+            {
+              "id": "baaec68e-d88b-478d-b3d7-9cdaba90e5a7",
+              "name": "lang",
+              "value": "en",
+              "type": "string"
+            },
+            {
+              "id": "1822a750-db60-472b-8cd7-f7ac2cd30c24",
+              "name": "count",
+              "value": 300,
+              "type": "number"
+            },
+            {
+              "id": "3923a04f-898c-459c-9c29-c4e5ed94e0ce",
+              "name": "sort",
+              "value": "newest",
+              "type": "string"
+            },
+            {
+              "id": "89210a8d-5aef-4730-998f-66e83e043d56",
+              "name": "minChars",
+              "value": 15,
+              "type": "number"
+            },
+            {
+              "id": "6eae544b-352e-4f77-9da9-e9a63ac1127d",
+              "name": "batchSize",
+              "value": 25,
+              "type": "number"
+            },
+            {
+              "id": "eda8edd1-338e-4cd9-96fc-2e274bcb8a29",
+              "name": "geminiModel",
+              "value": "gemini-3.8-flash",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "fa63dc03-93a6-4930-9df3-0d39ad3906db",
+      "name": "Fetch Play Store reviews",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "url": "http://playstore-reviews:3000/reviews",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "appId",
+              "value": "={{ $json.appId }}"
+            },
+            {
+              "name": "country",
+              "value": "={{ $json.country }}"
+            },
+            {
+              "name": "lang",
+              "value": "={{ $json.lang }}"
+            },
+            {
+              "name": "count",
+              "value": "={{ $json.count }}"
+            },
+            {
+              "name": "sort",
+              "value": "={{ $json.sort }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 300000
+        }
+      }
+    },
+    {
+      "id": "c8bc69f3-1f14-4ae3-8621-2530147c80fd",
+      "name": "Clean & batch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Clean the reviews, then group them into batches for Gemini.\nconst settings = $('Settings').first().json;\nconst resp = $input.first().json;\nconst raw = Array.isArray(resp.reviews) ? resp.reviews : [];\n\n// 1. Clean: drop very short or empty reviews, and exact duplicates\nconst seen = new Set();\nconst reviews = [];\nfor (const r of raw) {\n  const text = (r.text || '').replace(/\\s+/g, ' ').trim();\n  if (text.length < settings.minChars) continue;\n  const key = text.toLowerCase();\n  if (seen.has(key)) continue;\n  seen.add(key);\n  reviews.push({ id: r.id, text, score: r.score, date: r.date, thumbsUp: r.thumbsUp, appVersion: r.appVersion });\n}\n\n// 2. Prompt + JSON schema (Gemini structured output)\nconst instructions = `You are helping a product team understand why Urban Company customers in India do or do not book another home service within 90 days.\nTag EACH review below. Reviews may be in English, Hindi or Hinglish.\nRules:\n- Only use what the review says. Use \"unknown\" or \"not_applicable\" when it isn't stated. Never guess a city or household type.\n- themes: 1-3 short, specific themes in plain English (e.g. \"professional arrived late\", \"no reminder for next AC service\", \"booked same cleaner directly\"). Avoid vague themes like \"bad service\".\n- evidence: copy the shortest exact phrase from the review that supports your tags.\nReturn one object per review, using the same id.`;\n\nconst enumStr = (values) => ({ type: 'STRING', enum: values });\nconst schema = {\n  type: 'ARRAY',\n  items: {\n    type: 'OBJECT',\n    properties: {\n      id: { type: 'STRING' },\n      service_category: enumStr(['cleaning', 'ac_appliance_repair', 'plumbing_electrical', 'salon_spa', 'pest_control', 'painting', 'other', 'unknown']),\n      journey_stage: enumStr(['need_recognition', 'choosing_provider', 'booking', 'service_day', 'after_service', 'next_need', 'not_applicable']),\n      repeat_signal: enumStr(['already_repeat_customer', 'intends_to_return', 'will_not_return', 'switched_to_alternative', 'unclear']),\n      alternative_mentioned: enumStr(['local_provider', 'same_professional_directly', 'family_or_neighbour', 'whatsapp_or_society_group', 'competitor_app', 'none']),\n      sentiment: enumStr(['positive', 'mixed', 'negative']),\n      city: { type: 'STRING' },\n      household_type: { type: 'STRING' },\n      themes: { type: 'ARRAY', items: { type: 'STRING' } },\n      evidence: { type: 'STRING' },\n    },\n    required: ['id', 'service_category', 'journey_stage', 'repeat_signal', 'alternative_mentioned', 'sentiment', 'themes', 'evidence'],\n  },\n};\n\n// 3. Batch: one output item = one Gemini request\nconst out = [];\nfor (let i = 0; i < reviews.length; i += settings.batchSize) {\n  const batch = reviews.slice(i, i + settings.batchSize);\n  const listing = batch.map((r) => `id: ${r.id}\\nstars: ${r.score}\\nreview: ${r.text}`).join('\\n---\\n');\n  out.push({\n    json: {\n      batchIndex: out.length,\n      reviews: batch,\n      geminiBody: {\n        contents: [{ role: 'user', parts: [{ text: `${instructions}\\n\\nREVIEWS:\\n${listing}` }] }],\n        generationConfig: { temperature: 0.2, responseMimeType: 'application/json', responseSchema: schema },\n      },\n    },\n  });\n}\n\nif (out.length === 0) {\n  throw new Error(`No usable reviews. The service returned ${raw.length} reviews; check the Settings node or the playstore-reviews container logs.`);\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "3576f8e9-f005-4943-8810-c09b10eeab0e",
+      "name": "Tag with Gemini",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        300
+      ],
+      "notes": "Uses a Header Auth credential: name x-goog-api-key, value = your Gemini API key. Sends one batch every 15 s to stay inside free-tier limits.",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/{{ $('Settings').first().json.geminiModel }}:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.geminiBody) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 15000
+            }
+          },
+          "timeout": 120000
+        }
+      }
+    },
+    {
+      "id": "33d8e73c-0ce6-458f-8d5c-102b3c27ee54",
+      "name": "Merge tags",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Join Gemini's tags back onto each review. One input item = one batch.\nconst batches = $('Clean & batch').all();\nconst collectedAt = new Date().toISOString();\nconst rows = [];\n\n$input.all().forEach((item, i) => {\n  const reviews = batches[i]?.json.reviews ?? [];\n  let tags = [];\n  let tagError = '';\n  try {\n    if (item.json.error) throw new Error(typeof item.json.error === 'string' ? item.json.error : JSON.stringify(item.json.error));\n    const text = item.json.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') ?? '';\n    tags = JSON.parse(text);\n    if (!Array.isArray(tags)) throw new Error('Gemini did not return a list');\n  } catch (e) {\n    tagError = String(e.message || e).slice(0, 300);\n  }\n  const byId = new Map(tags.map((t) => [t.id, t]));\n\n  for (const r of reviews) {\n    const t = byId.get(r.id) || {};\n    rows.push({\n      json: {\n        source: 'play_store',\n        review_id: r.id,\n        date: r.date,\n        stars: r.score,\n        thumbs_up: r.thumbsUp,\n        app_version: r.appVersion,\n        text: r.text,\n        service_category: t.service_category ?? '',\n        journey_stage: t.journey_stage ?? '',\n        repeat_signal: t.repeat_signal ?? '',\n        alternative_mentioned: t.alternative_mentioned ?? '',\n        sentiment: t.sentiment ?? '',\n        city: t.city ?? '',\n        household_type: t.household_type ?? '',\n        themes: Array.isArray(t.themes) ? t.themes.join(' | ') : '',\n        evidence: t.evidence ?? '',\n        tag_error: t.id ? '' : (tagError || 'missing from Gemini response'),\n        batch: i,\n        collected_at: collectedAt,\n      },\n    });\n  }\n});\nreturn rows;"
+      }
+    },
+    {
+      "id": "7e967bbc-99c2-49ad-a213-bc36a5086330",
+      "name": "Reviews to CSV",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        1320,
+        200
+      ],
+      "parameters": {
+        "operation": "csv",
+        "options": {
+          "fileName": "playstore_reviews_tagged.csv"
+        }
+      }
+    },
+    {
+      "id": "e6f4245b-89e6-415f-939a-11bb8a982adf",
+      "name": "Save reviews CSV",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        200
+      ],
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/data/playstore_reviews_tagged_{{ $now.toFormat('yyyyMMdd_HHmm') }}.csv",
+        "options": {}
+      }
+    },
+    {
+      "id": "70f2ea05-7232-473a-bfe8-50f943a4443f",
+      "name": "Count themes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        420
+      ],
+      "parameters": {
+        "jsCode": "// Count themes and journey stages, ready to paste into the Notion \"Themes & Opportunities\" database.\nconst rows = $input.all().map((i) => i.json).filter((r) => !r.tag_error);\nconst total = rows.length;\nconst themes = new Map();\n\nfor (const r of rows) {\n  for (const raw of (r.themes || '').split(' | ')) {\n    const theme = raw.trim().toLowerCase();\n    if (!theme) continue;\n    const t = themes.get(theme) || { theme, mentions: 0, low_star: 0, stages: {}, categories: {}, example: '' };\n    t.mentions += 1;\n    if (r.stars <= 2) t.low_star += 1;\n    t.stages[r.journey_stage] = (t.stages[r.journey_stage] || 0) + 1;\n    t.categories[r.service_category] = (t.categories[r.service_category] || 0) + 1;\n    if (!t.example && r.evidence) t.example = r.evidence;\n    themes.set(theme, t);\n  }\n}\n\nconst top = (obj) => Object.entries(obj).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';\nreturn [...themes.values()]\n  .sort((a, b) => b.mentions - a.mentions)\n  .map((t) => ({\n    json: {\n      theme: t.theme,\n      mentions: t.mentions,\n      share_of_reviews_pct: total ? Math.round((t.mentions / total) * 1000) / 10 : 0,\n      low_star_share_pct: Math.round((t.low_star / t.mentions) * 1000) / 10,\n      main_journey_stage: top(t.stages),\n      main_category: top(t.categories),\n      example_quote: t.example,\n    },\n  }));"
+      }
+    },
+    {
+      "id": "0cd92813-d9bc-429b-a91a-327093daefa6",
+      "name": "Themes to CSV",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        1540,
+        420
+      ],
+      "parameters": {
+        "operation": "csv",
+        "options": {
+          "fileName": "playstore_themes.csv"
+        }
+      }
+    },
+    {
+      "id": "779c8151-6e15-4d35-a833-3e8a879293b2",
+      "name": "Save themes CSV",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        420
+      ],
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/data/playstore_themes_{{ $now.toFormat('yyyyMMdd_HHmm') }}.csv",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Run collector": {
+      "main": [
+        [
+          {
+            "node": "Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Settings": {
+      "main": [
+        [
+          {
+            "node": "Fetch Play Store reviews",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Play Store reviews": {
+      "main": [
+        [
+          {
+            "node": "Clean & batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean & batch": {
+      "main": [
+        [
+          {
+            "node": "Tag with Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tag with Gemini": {
+      "main": [
+        [
+          {
+            "node": "Merge tags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge tags": {
+      "main": [
+        [
+          {
+            "node": "Reviews to CSV",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Count themes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reviews to CSV": {
+      "main": [
+        [
+          {
+            "node": "Save reviews CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count themes": {
+      "main": [
+        [
+          {
+            "node": "Themes to CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Themes to CSV": {
+      "main": [
+        [
+          {
+            "node": "Save themes CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "active": false
+}

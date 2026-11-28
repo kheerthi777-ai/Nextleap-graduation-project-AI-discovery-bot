@@ -16,7 +16,8 @@ In n8n: **Workflows → Import from file**, then reconnect your own credentials.
 
 | File | What it does |
 |---|---|
-| `01-collect-*.json` | One collector per source (Play Store, App Store, Reddit, YouTube, …) |
+| ✅ `01-playstore-reviews-gemini.json` | Fetches Play Store reviews, cleans them, tags them with Gemini, saves a tagged-reviews CSV and a theme-counts CSV. Setup: [docs/setup-n8n.md](../docs/setup-n8n.md) |
+| `0x-collect-*.json` | More sources later (hand-collected Reddit sheet, App Store, YouTube, …) |
 | `02-clean-and-tag.json` | Deduplicate, then tag category, city, household type, acquisition channel and journey stage with the LLM |
 | `03-themes.json` | Group tagged items into themes and count them |
 | `04-score-opportunities.json` | Quantify, compare and adjust for bias |
